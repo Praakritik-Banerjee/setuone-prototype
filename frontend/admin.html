@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Dashboard — SetuOne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="masthead">
+  <div class="seal">SetuOne<small>Interoperability Control Room</small></div>
+  <nav><span class="role-pill" id="whoami"></span><button onclick="logout()">Sign out</button></nav>
+</header>
+
+<main>
+  <h1>Cross-department overview</h1>
+  <p class="lede">A consolidated view of service delivery, SLA compliance and integration health across every connected department.</p>
+
+  <div class="grid-3" id="statCards"></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>By department</h2>
+      <table id="deptTable"><thead><tr><th>Department</th><th>Total</th><th>Completed</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Connector health</h2>
+      <table id="connTable"><thead><tr><th>Connector</th><th>Calls</th><th>Success</th></tr></thead><tbody></tbody></table>
+      <p class="hint">These reusable connectors let legacy department systems (Aadhaar, PAN, ration DB, income registry) plug into the gateway without being rebuilt.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Audit log</h2>
+    <table id="auditTable"><thead><tr><th>Time</th><th>Actor</th><th>Role</th><th>Action</th><th>Entity</th></tr></thead><tbody></tbody></table>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script>
+const user = requireSession(['admin']);
+if (user) { document.getElementById('whoami').textContent = `${user.name} · Admin`; init(); }
+function logout() { clearSession(); window.location.href = '/index.html'; }
+
+async function init() {
+  const stats = await api('/dashboard/stats');
+  document.getElementById('statCards').innerHTML = `
+    <div class="card stat"><span class="num">${stats.total}</span><span class="label">Total applications</span></div>
+    <div class="card stat"><span class="num">${stats.slaCompliancePct}%</span><span class="label">SLA compliance</span></div>
+    <div class="card stat"><span class="num">${stats.duplicateSubmissionsPrevented}</span><span class="label">Identity checks reused (no re-submission)</span></div>`;
+    document.getElementById('statCards').insertAdjacentHTML('beforeend', `<div class="card stat"><span class="num">${stats.grievances.open}</span><span class="label">Open grievances</span></div>`);
+
+  document.querySelector('#deptTable tbody').innerHTML = Object.entries(stats.byDepartment).map(([name, d]) =>
+    `<tr><td>${name}</td><td>${d.total}</td><td>${d.completed}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No data yet.</td></tr>';
+
+  const health = await api('/connectors/health');
+  document.querySelector('#connTable tbody').innerHTML = Object.entries(health.byConnector).map(([name, h]) =>
+    `<tr><td>${name}</td><td>${h.total}</td><td>${h.success || 0}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No connector calls yet.</td></tr>';
+
+  const logs = await api('/audit-logs');
+  document.querySelector('#auditTable tbody').innerHTML = logs.slice(0, 100).map(l =>
+    `<tr><td class="hint">${fmtDate(l.timestamp)}</td><td>${l.actor}</td><td>${l.actorRole}</td><td>${l.action}</td><td>${l.entity}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No audit entries yet.</td></tr>';
+}
+</script>
+</body>
+</html>

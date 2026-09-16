@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Services — SetuOne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="masthead">
+  <div class="seal">SetuOne<small>Citizen Portal</small></div>
+  <nav>
+    <span class="role-pill" id="whoami"></span>
+    <button onclick="logout()">Sign out</button>
+  </nav>
+</header>
+
+<main>
+  <h1>My services</h1>
+  <p class="lede">Every application you've filed, across every department, tracked in one place — no need to visit separate portals.</p>
+
+  <div class="grid-3" id="summaryCards"></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Apply for a service</h2>
+      <div id="applyErr"></div>
+      <form id="applyForm">
+        <label>Service</label>
+        <select id="serviceSelect"></select>
+        <label>Note / supporting details</label>
+        <textarea id="applyNote" rows="3" placeholder="Any additional details for this application"></textarea>
+        <button class="primary" type="submit">Submit application</button>
+      </form>
+      <p class="hint" id="verifyNote"></p>
+    </div>
+
+    <div class="card">
+      <h2>Data sharing consent</h2>
+      <p class="hint">Grant a department permission to fetch your records from another department, instead of re-submitting documents.</p>
+      <div id="consentErr"></div>
+      <form id="consentForm">
+        <label>Department</label>
+        <select id="consentDept"></select>
+        <label>Purpose</label>
+        <input id="consentPurpose" placeholder="e.g. Verify income for scholarship" required />
+        <button class="secondary" type="submit">Grant consent</button>
+      </form>
+      <div id="consentList" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Application tracker</h2>
+    <table id="appsTable">
+      <thead><tr><th>Reference</th><th>Service</th><th>Department</th><th>Stage</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="detailCard" style="display:none">
+    <h2 id="detailTitle"></h2>
+    <ul class="timeline" id="detailTimeline"></ul>
+    <div id="grievanceArea"></div>
+  </div>
+
+  <div class="card">
+    <h2>Notifications</h2>
+    <ul id="notifList" style="padding-left:18px"></ul>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script>
+const user = requireSession(['citizen']);
+if (user) {
+  document.getElementById('whoami').textContent = `${user.name} · Citizen`;
+  init();
+}
+function logout() { clearSession(); window.location.href = '/index.html'; }
+
+let services = [];
+let departments = [];
+
+async function init() {
+  services = await api('/applications/services/catalog');
+  departments = await api('/departments');
+  const sSel = document.getElementById('serviceSelect');
+  sSel.innerHTML = services.map(s => `<option value="${s.id}">${s.name} — ${s.departmentName}</option>`).join('');
+  const dSel = document.getElementById('consentDept');
+  dSel.innerHTML = departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+
+  await refreshRecord();
+  await refreshConsents();
+
+  document.getElementById('applyForm').addEventListener('submit', submitApplication);
+  document.getElementById('consentForm').addEventListener('submit', submitConsent);
+}
+
+async function refreshRecord() {
+  const record = await api(`/citizens/${user.id}/golden-record`);
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card stat"><span class="num">${record.summary.totalApplications}</span><span class="label">Total applications</span></div>
+    <div class="card stat"><span class="num">${record.summary.pending}</span><span class="label">In progress</span></div>
+    <div class="card stat"><span class="num">${record.summary.completed}</span><span class="label">Completed</span></div>`;
+
+  const tbody = document.querySelector('#appsTable tbody');
+  tbody.innerHTML = record.applications.map(a => `
+    <tr>
+      <td class="hint">${a.id.slice(0,8)}</td>
+      <td>${a.serviceName}</td>
+      <td>${a.departmentName}</td>
+      <td>${a.currentStage}${a.slaBreached ? '<span class="tag breach">SLA breached</span>' : ''}</td>
+      <td>${statusTag(a.status)}</td>
+      <td><button class="secondary" onclick="showDetail('${a.id}')">View</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">No applications yet.</td></tr>';
+
+  document.getElementById('notifList').innerHTML = record.notifications.slice().reverse().map(n =>
+    `<li><b>${fmtDate(n.createdAt)}</b> — ${n.message}</li>`).join('') || '<li class="muted">No notifications yet.</li>';
+
+  window._record = record;
+}
+
+function showDetail(appId) {
+  const app = window._record.applications.find(a => a.id === appId);
+  document.getElementById('detailCard').style.display = 'block';
+  document.getElementById('detailTitle').textContent = `${app.serviceName} — ${app.departmentName}`;
+  document.getElementById('detailTimeline').innerHTML = app.history.map(h =>
+    `<li><div class="when">${fmtDate(h.at)} · ${h.by}</div><b>${h.stage}</b>${h.note ? ' — ' + h.note : ''}</li>`).join('');
+  document.getElementById('grievanceArea').innerHTML = `
+    <h3>Raise a grievance</h3>
+    <form onsubmit="submitGrievance(event, '${app.id}')">
+      <input id="grievanceSubject" placeholder="Subject" required />
+      <textarea id="grievanceDescription" rows="3" placeholder="Describe the issue" required></textarea>
+      <button class="secondary" type="submit">Submit grievance</button>
+    </form>`;
+  document.getElementById('detailCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function submitGrievance(event, applicationId) {
+  event.preventDefault();
+  try {
+    await api('/grievances', { method: 'POST', body: {
+      applicationId,
+      subject: document.getElementById('grievanceSubject').value,
+      description: document.getElementById('grievanceDescription').value
+    }});
+    document.getElementById('grievanceArea').innerHTML = '<p class="hint">Grievance submitted. Your department will respond within the SLA window.</p>';
+  } catch (err) {
+    document.getElementById('grievanceArea').insertAdjacentHTML('beforeend', `<div class="error">${err.message}</div>`);
+  }
+}
+
+async function submitApplication(e) {
+  e.preventDefault();
+  const serviceId = document.getElementById('serviceSelect').value;
+  const note = document.getElementById('applyNote').value;
+  const errBox = document.getElementById('applyErr');
+  errBox.innerHTML = '';
+  try {
+    const app = await api('/applications', { method: 'POST', body: { serviceId, data: { note } } });
+    document.getElementById('verifyNote').textContent = app.identityVerification.verified
+      ? 'Identity auto-verified via Aadhaar e-KYC connector — no documents needed for this step.'
+      : `Identity could not be auto-verified (${app.identityVerification.reason}). You may be asked for manual verification.`;
+    document.getElementById('applyForm').reset();
+    await refreshRecord();
+  } catch (err) {
+    errBox.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+async function refreshConsents() {
+  const consents = await api('/consent/mine');
+  document.getElementById('consentList').innerHTML = consents.map(c => {
+    const dept = departments.find(d => d.id === c.departmentId)?.name || 'Unknown';
+    return `<div style="padding:8px 0;border-top:1px solid var(--rule)">
+      <b>${dept}</b> — ${c.purpose} <span class="tag ${c.status === 'granted' ? 'completed' : 'rejected'}">${c.status}</span><br/>
+      <span class="hint">Expires ${fmtDate(c.expiresAt)}</span>
+      ${c.status === 'granted' ? `<button class="danger" style="margin-left:8px" onclick="revokeConsent('${c.id}')">Revoke</button>` : ''}
+    </div>`;
+  }).join('') || '<p class="muted">No consents granted yet.</p>';
+}
+
+async function submitConsent(e) {
+  e.preventDefault();
+  const departmentId = document.getElementById('consentDept').value;
+  const purpose = document.getElementById('consentPurpose').value;
+  const errBox = document.getElementById('consentErr');
+  errBox.innerHTML = '';
+  try {
+    await api('/consent', { method: 'POST', body: { departmentId, purpose } });
+    document.getElementById('consentForm').reset();
+    await refreshConsents();
+  } catch (err) {
+    errBox.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+async function revokeConsent(id) {
+  await api(`/consent/${id}/revoke`, { method: 'POST' });
+  await refreshConsents();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+{
+  "users": [
+    {
+      "id": "41161447-b3c2-4284-bc28-4a6ec1627d84",
+      "name": "Asha Patil",
+      "role": "citizen",
+      "aadhaar": "1234-5678-9012",
+      "mobile": "9876543210",
+      "email": "asha@example.com",
+      "passwordHash": "$2a$08$oYALWXrvElgEwTn1eum.vOURaHyUcieZXwH2vHjpc.tDfHvjYmAx6"
+    },
+    {
+      "id": "9904bb0c-60bd-4b4e-89bd-ca2870a49542",
+      "name": "Rohan Deshmukh",
+      "role": "officer",
+      "departmentId": "e44d8424-fe44-4d6d-8ad7-a105ed01631c",
+      "email": "rohan.rev@gov.in",
+      "passwordHash": "$2a$08$oYALWXrvElgEwTn1eum.vOURaHyUcieZXwH2vHjpc.tDfHvjYmAx6"
+    },
+    {
+      "id": "faa4805a-b295-4942-b250-5e65f5b73cbe",
+      "name": "Neha Kulkarni",
+      "role": "officer",
+      "departmentId": "9481da5c-f363-4487-b8b8-837a0bd1b95e",
+      "email": "neha.sde@gov.in",
+      "passwordHash": "$2a$08$oYALWXrvElgEwTn1eum.vOURaHyUcieZXwH2vHjpc.tDfHvjYmAx6"
+    },
+    {
+      "id": "fb6f052d-139e-427d-9b74-2c410962afd4",
+      "name": "Admin User",
+      "role": "admin",
+      "email": "admin@gov.in",
+      "passwordHash": "$2a$08$oYALWXrvElgEwTn1eum.vOURaHyUcieZXwH2vHjpc.tDfHvjYmAx6"
+    }
+  ],
+  "departments": [
+    {
+      "id": "e44d8424-fe44-4d6d-8ad7-a105ed01631c",
+      "name": "Revenue Department",
+      "code": "REV"
+    },
+    {
+      "id": "9481da5c-f363-4487-b8b8-837a0bd1b95e",
+      "name": "Skill Development & Employment",
+      "code": "SDE"
+    },
+    {
+      "id": "653715cb-1402-41fe-be31-fa5728a3f515",
+      "name": "Food & Civil Supplies (Ration Card)",
+      "code": "FCS"
+    },
+    {
+      "id": "7570d4b7-435e-490d-8372-d0cab90ae85e",
+      "name": "Social Welfare Department",
+      "code": "SWD"
+    }
+  ],
+  "services": [
+    {
+      "id": "e11f31a5-b92d-40cd-962e-905e11ed0f72",
+      "departmentId": "e44d8424-fe44-4d6d-8ad7-a105ed01631c",
+      "name": "Income Certificate",
+      "workflow": [
+        "Submitted",
+        "Document Verification",
+        "Tehsildar Approval",
+        "Certificate Issued"
+      ],
+      "slaHours": 168
+    },
+    {
+      "id": "f1125fbf-a40f-4e15-accd-f5853c0e6501",
+      "departmentId": "9481da5c-f363-4487-b8b8-837a0bd1b95e",
+      "name": "Skill Training Enrollment",
+      "workflow": [
+        "Submitted",
+        "Eligibility Check",
+        "Batch Allotment",
+        "Enrolled"
+      ],
+      "slaHours": 72
+    },
+    {
+      "id": "67a19e7e-93be-4b58-82c3-c33300202678",
+      "departmentId": "653715cb-1402-41fe-be31-fa5728a3f515",
+      "name": "New Ration Card",
+      "workflow": [
+        "Submitted",
+        "Field Verification",
+        "FSO Approval",
+        "Card Issued"
+      ],
+      "slaHours": 240
+    },
+    {
+      "id": "ed1a1717-5fcd-4533-87b6-032cc84ac485",
+      "departmentId": "7570d4b7-435e-490d-8372-d0cab90ae85e",
+      "name": "Scholarship Application",
+      "workflow": [
+        "Submitted",
+        "Income/Caste Validation",
+        "Committee Review",
+        "Disbursed"
+      ],
+      "slaHours": 336
+    }
+  ],
+  "applications": [],
+  "consents": [],
+  "auditLogs": [],
+  "notifications": [],
+  "connectorLogs": []
+}

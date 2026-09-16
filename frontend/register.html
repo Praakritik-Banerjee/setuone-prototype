@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Create account — SetuOne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="masthead"><div class="seal">SetuOne<small>Unified Government Service Gateway — Maharashtra (Prototype)</small></div></header>
+<main>
+  <div class="auth-shell">
+    <h1 style="text-align:center">Create your SetuOne ID</h1>
+    <p class="lede" style="text-align:center;margin-left:auto;margin-right:auto">Register once, use it across every department. We check for existing records to avoid duplicates.</p>
+    <div class="card">
+      <div id="err"></div>
+      <form id="regForm">
+        <label>Full name</label><input id="name" required />
+        <label>Aadhaar number (format 0000-0000-0000)</label><input id="aadhaar" placeholder="1234-5678-9012" />
+        <label>Mobile number</label><input id="mobile" required />
+        <label>Email</label><input id="email" type="email" required />
+        <label>Password</label><input id="password" type="password" required />
+        <button class="primary" type="submit" style="width:100%">Create account</button>
+      </form>
+    </div>
+    <p style="text-align:center" class="hint">Already registered? <a href="/index.html">Sign in</a></p>
+  </div>
+</main>
+<script src="js/api.js"></script>
+<script>
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    name: document.getElementById('name').value.trim(),
+    aadhaar: document.getElementById('aadhaar').value.trim() || null,
+    mobile: document.getElementById('mobile').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('password').value
+  };
+  const errBox = document.getElementById('err');
+  errBox.innerHTML = '';
+  try {
+    const { token, user } = await api('/auth/register-citizen', { method: 'POST', body });
+    setSession(token, user);
+    window.location.href = '/citizen.html';
+  } catch (err) {
+    errBox.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Officer Console — SetuOne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="masthead">
+  <div class="seal">SetuOne<small>Officer Console</small></div>
+  <nav><span class="role-pill" id="whoami"></span><button onclick="logout()">Sign out</button></nav>
+</header>
+
+<main>
+  <h1>Applications queue</h1>
+  <p class="lede">Every application filed for your department, wherever the citizen submitted it from.</p>
+
+  <div class="grid-3" id="summaryCards"></div>
+
+  <div class="card">
+    <h2>Grievances</h2>
+    <table id="grievanceTable"><thead><tr><th>Subject</th><th>Application</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <table id="appsTable">
+      <thead><tr><th>Reference</th><th>Citizen</th><th>Service</th><th>Stage</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="detailCard" style="display:none">
+    <h2 id="detailTitle"></h2>
+    <ul class="timeline" id="detailTimeline"></ul>
+    <div id="actionErr"></div>
+    <div id="actionArea"></div>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script>
+const user = requireSession(['officer', 'admin']);
+if (user) { document.getElementById('whoami').textContent = `${user.name} · Officer`; init(); }
+function logout() { clearSession(); window.location.href = '/index.html'; }
+
+let apps = [];
+async function init() {
+  await refresh();
+}
+
+async function refresh() {
+  apps = await api('/applications');
+  const grievances = await api('/grievances');
+  const total = apps.length;
+  const completed = apps.filter(a => a.status === 'Completed').length;
+  const breached = apps.filter(a => a.slaBreached).length;
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card stat"><span class="num">${total}</span><span class="label">Applications</span></div>
+    <div class="card stat"><span class="num">${completed}</span><span class="label">Completed</span></div>
+    <div class="card stat"><span class="num">${breached}</span><span class="label">SLA breached</span></div>`;
+
+  document.querySelector('#appsTable tbody').innerHTML = apps.map(a => `
+    <tr>
+      <td class="hint">${a.id.slice(0,8)}</td>
+      <td>${a.citizenName}</td>
+      <td>${a.serviceName}</td>
+      <td>${a.currentStage}${a.slaBreached ? '<span class="tag breach">Breach</span>' : ''}</td>
+      <td>${statusTag(a.status)}</td>
+      <td><button class="secondary" onclick="showDetail('${a.id}')">Open</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">No applications for your department yet.</td></tr>';
+  document.querySelector('#grievanceTable tbody').innerHTML = grievances.map(g => `
+    <tr><td>${g.subject}</td><td class="hint">${g.applicationId.slice(0, 8)}</td><td>${statusTag(g.status)}</td>
+    <td>${g.status === 'Resolved' ? '' : `<button class="secondary" onclick="respondToGrievance('${g.id}')">Respond</button>`}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No grievances for your department.</td></tr>';
+}
+
+async function respondToGrievance(id) {
+  const response = prompt('Response to citizen:');
+  if (!response) return;
+  try {
+    await api(`/grievances/${id}/respond`, { method: 'PATCH', body: { response } });
+    await refresh();
+  } catch (err) {
+    document.getElementById('actionErr').innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+function showDetail(id) {
+  const app = apps.find(a => a.id === id);
+  document.getElementById('detailCard').style.display = 'block';
+  document.getElementById('detailTitle').textContent = `${app.serviceName} — ${app.citizenName}`;
+  document.getElementById('detailTimeline').innerHTML = app.history.map(h =>
+    `<li><div class="when">${fmtDate(h.at)} · ${h.by}</div><b>${h.stage}</b>${h.note ? ' — ' + h.note : ''}</li>`).join('');
+
+  const actionArea = document.getElementById('actionArea');
+  document.getElementById('actionErr').innerHTML = '';
+  if (app.status !== 'In Progress') {
+    actionArea.innerHTML = `<p class="muted">This application is ${app.status.toLowerCase()} — no further action needed.</p>`;
+    return;
+  }
+  const nextStage = app.workflow[app.currentStageIndex + 1];
+  actionArea.innerHTML = `
+    <label>Note (optional)</label>
+    <textarea id="noteBox" rows="2" placeholder="Reviewer note"></textarea>
+    <button class="primary" onclick="advance('${app.id}')">Advance to "${nextStage}"</button>
+    <button class="danger" style="margin-left:10px" onclick="reject('${app.id}')">Reject application</button>`;
+  document.getElementById('detailCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function advance(id) {
+  const note = document.getElementById('noteBox')?.value || '';
+  try {
+    await api(`/applications/${id}/advance`, { method: 'PATCH', body: { note } });
+    await refresh();
+    showDetail(id);
+  } catch (err) {
+    document.getElementById('actionErr').innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+async function reject(id) {
+  const reason = prompt('Reason for rejection:');
+  if (!reason) return;
+  try {
+    await api(`/applications/${id}/reject`, { method: 'PATCH', body: { reason } });
+    await refresh();
+    showDetail(id);
+  } catch (err) {
+    document.getElementById('actionErr').innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

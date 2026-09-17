@@ -52,7 +52,7 @@ async function init() {
 }
 
 async function refresh() {
-  apps = await api('/applications');
+  apps = (await api('/applications')).sort((left, right) => Number(right.escalated) - Number(left.escalated));
   const grievances = await api('/grievances');
   const total = apps.length;
   const completed = apps.filter(a => a.status === 'Completed').length;
@@ -67,7 +67,7 @@ async function refresh() {
       <td class="hint">${a.id.slice(0,8)}</td>
       <td>${a.citizenName}</td>
       <td>${a.serviceName}</td>
-      <td>${a.currentStage}${a.slaBreached ? '<span class="tag breach">Breach</span>' : ''}</td>
+      <td>${a.currentStage}${a.escalated ? '<span class="tag breach">Escalated</span>' : ''}${a.slaBreached ? '<span class="tag breach">Breach</span>' : ''}</td>
       <td>${statusTag(a.status)}</td>
       <td><button class="secondary" onclick="showDetail('${a.id}')">Open</button></td>
     </tr>`).join('') || '<tr><td colspan="6" class="muted">No applications for your department yet.</td></tr>';

@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_FILE = path.join(__dirname, 'data', 'db.json');
+const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'data', 'db.json');
 const LOCK_FILE = `${DB_FILE}.lock`;
 
 const DEFAULT_DB = {
@@ -14,9 +14,10 @@ const DEFAULT_DB = {
   applications: [],    // {id, citizenId, serviceId, departmentId, status, currentStageIndex, data, createdAt, updatedAt, history:[]}
   consents: [],        // {id, citizenId, departmentId, purpose, grantedAt, expiresAt, status}
   auditLogs: [],       // {id, actor, actorRole, action, entity, entityId, timestamp, details}
-  notifications: [],   // {id, citizenId, message, channel, status, createdAt}
+  notifications: [],   // {id, citizenId|departmentId, message, channel, status, createdAt}
   connectorLogs: [],   // {id, connector, request, response, timestamp, status}
-  grievances: []       // reserved for the grievance module
+  grievances: [],      // reserved for the grievance module
+  dataQualityFlags: [] // {id, type, candidateIds, reason, status, createdAt, resolvedAt, resolvedBy}
 };
 
 function load() {
@@ -25,7 +26,16 @@ function load() {
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify(DEFAULT_DB, null, 2));
   }
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  let db;
+  try {
+    db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  } catch (error) {
+    throw new Error(`Database file is not valid JSON: ${DB_FILE}. ${error.message}`);
+  }
+  for (const [collection, defaultValue] of Object.entries(DEFAULT_DB)) {
+    if (!Array.isArray(db[collection])) db[collection] = Array.isArray(defaultValue) ? [] : defaultValue;
+  }
+  return db;
 }
 
 function save(db) {

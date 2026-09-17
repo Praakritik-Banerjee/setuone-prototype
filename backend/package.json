@@ -3,12 +3,19 @@
   "version": "1.0.0",
   "main": "server.js",
   "type": "commonjs",
-  "scripts": { "start": "node server.js" },
+  "scripts": { "start": "node server.js", "test": "jest --runInBand" },
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "nodemailer": "^6.9.16",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.4.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
   }
 }

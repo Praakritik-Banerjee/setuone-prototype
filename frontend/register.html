@@ -20,6 +20,7 @@
         <label>Full name</label><input id="name" required />
         <label>Aadhaar number (format 0000-0000-0000)</label><input id="aadhaar" placeholder="1234-5678-9012" />
         <label>Mobile number</label><input id="mobile" required />
+        <label>Date of birth</label><input id="dateOfBirth" type="date" />
         <label>Email</label><input id="email" type="email" required />
         <label>Password</label><input id="password" type="password" required />
         <button class="primary" type="submit" style="width:100%">Create account</button>
@@ -36,6 +37,7 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
     name: document.getElementById('name').value.trim(),
     aadhaar: document.getElementById('aadhaar').value.trim() || null,
     mobile: document.getElementById('mobile').value.trim(),
+    dateOfBirth: document.getElementById('dateOfBirth').value || null,
     email: document.getElementById('email').value.trim(),
     password: document.getElementById('password').value
   };

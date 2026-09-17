@@ -33,6 +33,24 @@
   </div>
 
   <div class="card">
+    <h2>Workflow builder</h2>
+    <div id="serviceErr"></div>
+    <form id="serviceForm">
+      <label>Service name</label><input id="newServiceName" required />
+      <label>Department</label><select id="newServiceDepartment"></select>
+      <label>SLA hours</label><input id="newServiceSla" type="number" min="1" value="72" required />
+      <label>Workflow stages</label><div id="stageRows"></div><button type="button" class="secondary" onclick="addStage()">Add stage</button>
+      <label>Required fields (comma-separated)</label><input id="newServiceFields" placeholder="fieldOne, fieldTwo" />
+      <button class="primary" type="submit">Create service</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Possible duplicate citizens</h2>
+    <div id="duplicateList" class="stack"></div>
+  </div>
+
+  <div class="card">
     <h2>Audit log</h2>
     <table id="auditTable"><thead><tr><th>Time</th><th>Actor</th><th>Role</th><th>Action</th><th>Entity</th></tr></thead><tbody></tbody></table>
   </div>
@@ -45,12 +63,16 @@ if (user) { document.getElementById('whoami').textContent = `${user.name} · Adm
 function logout() { clearSession(); window.location.href = '/index.html'; }
 
 async function init() {
+  const departments = await api('/departments');
+  document.getElementById('newServiceDepartment').innerHTML = departments.map(department => `<option value="${department.id}">${department.name}</option>`).join('');
+  addStage('Submitted');
   const stats = await api('/dashboard/stats');
   document.getElementById('statCards').innerHTML = `
     <div class="card stat"><span class="num">${stats.total}</span><span class="label">Total applications</span></div>
     <div class="card stat"><span class="num">${stats.slaCompliancePct}%</span><span class="label">SLA compliance</span></div>
     <div class="card stat"><span class="num">${stats.duplicateSubmissionsPrevented}</span><span class="label">Identity checks reused (no re-submission)</span></div>`;
     document.getElementById('statCards').insertAdjacentHTML('beforeend', `<div class="card stat"><span class="num">${stats.grievances.open}</span><span class="label">Open grievances</span></div>`);
+    document.getElementById('statCards').insertAdjacentHTML('beforeend', `<div class="card stat"><span class="num">${stats.escalatedCount}</span><span class="label">Escalated applications</span></div>`);
 
   document.querySelector('#deptTable tbody').innerHTML = Object.entries(stats.byDepartment).map(([name, d]) =>
     `<tr><td>${name}</td><td>${d.total}</td><td>${d.completed}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">No data yet.</td></tr>';
@@ -62,6 +84,44 @@ async function init() {
   const logs = await api('/audit-logs');
   document.querySelector('#auditTable tbody').innerHTML = logs.slice(0, 100).map(l =>
     `<tr><td class="hint">${fmtDate(l.timestamp)}</td><td>${l.actor}</td><td>${l.actorRole}</td><td>${l.action}</td><td>${l.entity}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No audit entries yet.</td></tr>';
+
+  const flags = await api('/admin/data-quality/duplicates');
+  document.getElementById('duplicateList').innerHTML = flags.map(flag => `
+    <div class="notice" id="flag-${flag.id}">
+      <strong>${flag.reason}</strong>
+      <div>${flag.candidates.map(candidate => `${candidate.name} (${candidate.email}, ${candidate.mobile})`).join(' &middot; ')}</div>
+      <button onclick="resolveFlag('${flag.id}')">Mark as reviewed</button>
+    </div>`).join('') || '<p class="muted">No open duplicate flags.</p>';
+}
+
+function addStage(value = '') {
+  const row = document.createElement('div');
+  row.innerHTML = `<input class="stage-input" value="${value}" required /> <button type="button" onclick="this.parentElement.remove()">Remove</button>`;
+  document.getElementById('stageRows').appendChild(row);
+}
+
+document.getElementById('serviceForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    await api('/admin/services', { method: 'POST', body: {
+      name: document.getElementById('newServiceName').value.trim(),
+      departmentId: document.getElementById('newServiceDepartment').value,
+      slaHours: Number(document.getElementById('newServiceSla').value),
+      workflow: [...document.querySelectorAll('.stage-input')].map(input => input.value.trim()),
+      requiredFields: document.getElementById('newServiceFields').value.split(',').map(field => field.trim()).filter(Boolean)
+    }});
+    document.getElementById('serviceForm').reset();
+    document.getElementById('stageRows').innerHTML = '';
+    addStage('Submitted');
+    document.getElementById('serviceErr').innerHTML = '<p class="hint">Service created.</p>';
+  } catch (error) {
+    document.getElementById('serviceErr').innerHTML = `<div class="error">${error.message}</div>`;
+  }
+});
+
+async function resolveFlag(id) {
+  await api(`/admin/data-quality/duplicates/${id}/resolve`, { method: 'PATCH' });
+  document.getElementById(`flag-${id}`).remove();
 }
 </script>
 </body>

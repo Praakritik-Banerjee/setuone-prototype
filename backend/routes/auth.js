@@ -5,6 +5,7 @@ const { load, save } = require('../db');
 const { sign } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { validateEmail, validateRegistration } = require('../validation');
+const { findPotentialDuplicates, createFlag } = require('../mdm');
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ router.post('/login', (req, res) => {
 // Citizen self-registration — feeds the Master Data Management dedupe check.
 router.post('/register-citizen', (req, res) => {
   const body = req.body || {};
-  const { name, aadhaar, mobile, email, password } = body;
+  const { name, aadhaar, mobile, email, password, dateOfBirth } = body;
   const validationErrors = validateRegistration(body);
   if (validationErrors.length) return res.status(400).json({ error: 'Invalid registration data', details: validationErrors });
   const db = load();
@@ -40,8 +41,11 @@ router.post('/register-citizen', (req, res) => {
   if (dup) {
     return res.status(409).json({ error: 'A citizen record already exists with this Aadhaar/mobile/email (MDM dedupe match)', existingId: dup.id });
   }
-  const user = { id: uuid(), name, role: 'citizen', aadhaar: aadhaar || null, mobile, email, passwordHash: bcrypt.hashSync(password, 8) };
+  const user = { id: uuid(), name, role: 'citizen', aadhaar: aadhaar || null, mobile, email, dateOfBirth: dateOfBirth || null, passwordHash: bcrypt.hashSync(password, 8) };
   db.users.push(user);
+  const potentialDuplicates = findPotentialDuplicates(db, user)
+    .filter(match => match.user.id !== user.id);
+  potentialDuplicates.forEach(match => createFlag(db, user.id, match));
   logAction(db, { actor: name, actorRole: 'citizen', action: 'REGISTER', entity: 'user', entityId: user.id });
   save(db);
   const token = sign(user);

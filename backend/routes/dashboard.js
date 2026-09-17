@@ -45,6 +45,7 @@ router.get('/stats', requireAuth, requireRole('admin', 'officer'), (req, res) =>
     rejected,
     inProgress,
     slaBreached: breached,
+    escalatedCount: apps.filter(a => a.escalated).length,
     slaCompliancePct: total ? Math.round(((total - breached) / total) * 100) : 100,
     grievances: {
       total: grievances.length,

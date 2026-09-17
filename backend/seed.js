@@ -17,10 +17,10 @@ if (db.departments.length === 0) {
 
   const [rev, sde, fcs, swd] = depts;
   db.services.push(
-    { id: uuid(), departmentId: rev.id, name: 'Income Certificate', workflow: ['Submitted', 'Document Verification', 'Tehsildar Approval', 'Certificate Issued'], slaHours: 168 },
-    { id: uuid(), departmentId: sde.id, name: 'Skill Training Enrollment', workflow: ['Submitted', 'Eligibility Check', 'Batch Allotment', 'Enrolled'], slaHours: 72 },
-    { id: uuid(), departmentId: fcs.id, name: 'New Ration Card', workflow: ['Submitted', 'Field Verification', 'FSO Approval', 'Card Issued'], slaHours: 240 },
-    { id: uuid(), departmentId: swd.id, name: 'Scholarship Application', workflow: ['Submitted', 'Income/Caste Validation', 'Committee Review', 'Disbursed'], slaHours: 336 }
+    { id: uuid(), departmentId: rev.id, name: 'Income Certificate', workflow: ['Submitted', 'Document Verification', 'Tehsildar Approval', 'Certificate Issued'], slaHours: 168, requiredFields: ['annualIncome', 'purpose'] },
+    { id: uuid(), departmentId: sde.id, name: 'Skill Training Enrollment', workflow: ['Submitted', 'Eligibility Check', 'Batch Allotment', 'Enrolled'], slaHours: 72, requiredFields: ['educationLevel', 'preferredTrade'] },
+    { id: uuid(), departmentId: fcs.id, name: 'New Ration Card', workflow: ['Submitted', 'Field Verification', 'FSO Approval', 'Card Issued'], slaHours: 240, requiredFields: ['familySize', 'address'] },
+    { id: uuid(), departmentId: swd.id, name: 'Scholarship Application', workflow: ['Submitted', 'Income/Caste Validation', 'Committee Review', 'Disbursed'], slaHours: 336, requiredFields: ['annualIncome', 'casteCategory', 'institutionName'] }
   );
 
   const passwordHash = bcrypt.hashSync('password123', 8);
@@ -35,5 +35,19 @@ if (db.departments.length === 0) {
   console.log('Seeded database with demo departments, services and users.');
   console.log('Login with password "password123" for: asha@example.com (citizen), rohan.rev@gov.in (officer), admin@gov.in (admin)');
 } else {
+  const requiredFieldsByService = {
+    'Income Certificate': ['annualIncome', 'purpose'],
+    'Skill Training Enrollment': ['educationLevel', 'preferredTrade'],
+    'New Ration Card': ['familySize', 'address'],
+    'Scholarship Application': ['annualIncome', 'casteCategory', 'institutionName']
+  };
+  let changed = false;
+  db.services.forEach(service => {
+    if (!service.requiredFields && requiredFieldsByService[service.name]) {
+      service.requiredFields = requiredFieldsByService[service.name];
+      changed = true;
+    }
+  });
+  if (changed) save(db);
   console.log('DB already seeded — skipping.');
 }

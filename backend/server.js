@@ -3,6 +3,8 @@
 // enforces auth + RBAC, and logs everything for audit.
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 
 const authRoutes = require('./routes/auth');
@@ -13,12 +15,20 @@ const connectorRoutes = require('./routes/connectorRoutes');
 const auditRoutes = require('./routes/audit');
 const dashboardRoutes = require('./routes/dashboard');
 const grievanceRoutes = require('./routes/grievances');
-const { load } = require('./db');
+const adminRoutes = require('./routes/admin');
+const { load, save } = require('./db');
+const { checkSlaBreaches } = require('./escalation');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required when NODE_ENV=production');
+}
+
 app.use(cors());
+app.use(helmet());
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.json());
 
 // Simple request log (would be replaced by a real observability stack)
@@ -42,6 +52,14 @@ app.use('/api/connectors', connectorRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/grievances', grievanceRoutes);
+app.use('/api/admin', adminRoutes);
+
+const escalationIntervalMs = Number(process.env.SLA_CHECK_INTERVAL_MS || 5 * 60 * 1000);
+// Production would run this scan as a durable cron or queue worker.
+setInterval(() => {
+  const db = load();
+  if (checkSlaBreaches(db)) save(db);
+}, escalationIntervalMs).unref();
 
 // Serve the frontend (static files) so the whole prototype runs from one process.
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
@@ -54,7 +72,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`\nGov Interoperability Platform API running on http://localhost:${PORT}`);
-  console.log(`Frontend served at            http://localhost:${PORT}/index.html\n`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\nGov Interoperability Platform API running on http://localhost:${PORT}`);
+    console.log(`Frontend served at            http://localhost:${PORT}/index.html\n`);
+  });
+}
+
+module.exports = app;

@@ -30,6 +30,7 @@
       <form id="applyForm">
         <label>Service</label>
         <select id="serviceSelect"></select>
+        <div id="serviceFields"></div>
         <label>Note / supporting details</label>
         <textarea id="applyNote" rows="3" placeholder="Any additional details for this application"></textarea>
         <button class="primary" type="submit">Submit application</button>
@@ -89,6 +90,8 @@ async function init() {
   departments = await api('/departments');
   const sSel = document.getElementById('serviceSelect');
   sSel.innerHTML = services.map(s => `<option value="${s.id}">${s.name} — ${s.departmentName}</option>`).join('');
+  sSel.addEventListener('change', renderServiceFields);
+  renderServiceFields();
   const dSel = document.getElementById('consentDept');
   dSel.innerHTML = departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
 
@@ -157,10 +160,15 @@ async function submitApplication(e) {
   e.preventDefault();
   const serviceId = document.getElementById('serviceSelect').value;
   const note = document.getElementById('applyNote').value;
+  const selectedService = services.find(service => service.id === serviceId);
+  const data = { note };
+  (selectedService.requiredFields || []).forEach(field => {
+    data[field] = document.getElementById(`service-field-${field}`).value.trim();
+  });
   const errBox = document.getElementById('applyErr');
   errBox.innerHTML = '';
   try {
-    const app = await api('/applications', { method: 'POST', body: { serviceId, data: { note } } });
+    const app = await api('/applications', { method: 'POST', body: { serviceId, data } });
     document.getElementById('verifyNote').textContent = app.identityVerification.verified
       ? 'Identity auto-verified via Aadhaar e-KYC connector — no documents needed for this step.'
       : `Identity could not be auto-verified (${app.identityVerification.reason}). You may be asked for manual verification.`;
@@ -169,6 +177,14 @@ async function submitApplication(e) {
   } catch (err) {
     errBox.innerHTML = `<div class="error">${err.message}</div>`;
   }
+}
+
+function renderServiceFields() {
+  const selectedService = services.find(service => service.id === document.getElementById('serviceSelect').value);
+  document.getElementById('serviceFields').innerHTML = (selectedService?.requiredFields || []).map(field => `
+    <label>${field.replace(/[A-Z]/g, letter => ` ${letter}`).replace(/^./, letter => letter.toUpperCase())}</label>
+    <input id="service-field-${field}" ${field === 'familySize' || field === 'annualIncome' ? 'type="number" min="0"' : ''} required />
+  `).join('');
 }
 
 async function refreshConsents() {

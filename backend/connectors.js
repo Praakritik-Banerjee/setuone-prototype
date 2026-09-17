@@ -9,45 +9,88 @@ function logCall(db, connector, request, response, status) {
   db.connectorLogs.push({ id: uuid(), connector, request, response, status, timestamp: new Date().toISOString() });
 }
 
+function call(db, connector, request, operation, fallback) {
+  try {
+    const response = operation();
+    logCall(db, connector, request, response, 'success');
+    return response;
+  } catch (error) {
+    logCall(db, connector, request, { error: error.message }, 'error');
+    return fallback;
+  }
+}
+
+async function asyncCall(db, connector, request, operation, fallback) {
+  try {
+    const response = await operation();
+    logCall(db, connector, request, response, response?.valid === false ? 'error' : 'success');
+    return response;
+  } catch (error) {
+    logCall(db, connector, request, { error: error.message }, 'error');
+    return fallback;
+  }
+}
+
 const connectors = {
   // Simulated UIDAI-style Aadhaar e-KYC verification
   aadhaar: {
     name: 'Aadhaar e-KYC (mock)',
     verify(db, aadhaar) {
-      const ok = /^\d{4}-\d{4}-\d{4}$/.test(aadhaar);
-      const response = ok
-        ? { verified: true, nameMatch: true, ageAbove18: true }
-        : { verified: false, reason: 'Invalid Aadhaar format' };
-      logCall(db, 'aadhaar', { aadhaar }, response, ok ? 'success' : 'error');
-      return response;
+      return call(db, 'aadhaar', { aadhaar }, () => {
+        const ok = /^\d{4}-\d{4}-\d{4}$/.test(aadhaar);
+        return ok ? { verified: true, nameMatch: true, ageAbove18: true } : { verified: false, reason: 'Invalid Aadhaar format' };
+      }, { verified: false, reason: 'Connector failure; manual verification required' });
     }
   },
-  // Simulated PAN verification (Income Tax dept style)
+  // PAN holder type codes: P individual, C company, H HUF, F firm/LLP,
+  // A association, T trust, B body of individuals, L local authority,
+  // J artificial juridical person, G government.
   pan: {
-    name: 'PAN Verification (mock)',
+    name: 'PAN Structural Validation (local)',
     verify(db, pan) {
-      const ok = /^[A-Z]{5}\d{4}[A-Z]$/.test(pan || '');
-      const response = ok ? { verified: true, status: 'ACTIVE' } : { verified: false, reason: 'Invalid PAN format' };
-      logCall(db, 'pan', { pan }, response, ok ? 'success' : 'error');
-      return response;
+      return call(db, 'pan', { pan }, () => {
+        const normalized = String(pan || '').toUpperCase();
+        if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(normalized)) return { verified: false, reason: 'PAN must contain five letters, four digits, and a final letter' };
+        const holderTypes = { P: 'individual', C: 'company', H: 'HUF', F: 'firm or LLP', A: 'association of persons', T: 'trust', B: 'body of individuals', L: 'local authority', J: 'artificial juridical person', G: 'government' };
+        const holderType = holderTypes[normalized[3]];
+        if (!holderType) return { verified: false, reason: 'PAN contains an unknown holder type code' };
+        return { verified: true, structuralOnly: true, holderTypeCode: normalized[3], holderType };
+      }, { verified: false, reason: 'Connector failure; manual verification required' });
     }
   },
   // Simulated legacy Ration Card DB lookup (e.g. FTP/CSV based legacy system)
   rationDb: {
     name: 'Legacy Ration Card Registry (mock)',
     lookup(db, mobile) {
-      const response = { found: false, note: 'No existing ration card linked to this mobile number' };
-      logCall(db, 'rationDb', { mobile }, response, 'success');
-      return response;
+      return call(db, 'rationDb', { mobile }, () => ({ found: false, note: 'No existing ration card linked to this mobile number' }), { found: false, note: 'Connector failure; manual verification required' });
     }
   },
   // Simulated income-record registry used to auto-validate income certificates
   incomeRegistry: {
     name: 'State Income Registry (mock)',
     fetch(db, aadhaar) {
-      const response = { annualIncome: 185000, source: 'Tehsil Revenue Records', asOf: '2026-03-31' };
-      logCall(db, 'incomeRegistry', { aadhaar }, response, 'success');
-      return response;
+      return call(db, 'incomeRegistry', { aadhaar }, () => ({ annualIncome: 185000, source: 'Tehsil Revenue Records', asOf: '2026-03-31' }), { manualVerificationRequired: true });
+    }
+  },
+  casteRegistry: {
+    name: 'State Caste Certificate Registry (mock)',
+    lookup(db, aadhaar, casteCategory) {
+      return call(db, 'casteRegistry', { aadhaar, casteCategory }, () => ({ verified: Boolean(casteCategory), source: 'State Caste Certificate Registry' }), { verified: false, manualVerificationRequired: true });
+    }
+  },
+  pincode: {
+    name: 'India Post Pincode Lookup (real, free API)',
+    async lookup(db, pincode) {
+      const normalized = String(pincode || '').trim();
+      if (!/^\d{6}$/.test(normalized)) return asyncCall(db, 'pincode', { pincode: normalized }, async () => ({ valid: false, reason: 'Pincode must be a six-digit number' }), { valid: false, reason: 'Pincode must be a six-digit number' });
+      return asyncCall(db, 'pincode', { pincode: normalized }, async () => {
+        const response = await fetch(`https://api.postalpincode.in/pincode/${normalized}`);
+        if (!response.ok) throw new Error(`India Post API returned HTTP ${response.status}`);
+        const data = await response.json();
+        const record = data?.[0];
+        if (record?.Status !== 'Success' || !record.PostOffice?.[0]) return { valid: false, reason: 'Pincode not found' };
+        return { valid: true, district: record.PostOffice[0].District, state: record.PostOffice[0].State };
+      }, { valid: false, reason: 'Pincode lookup unavailable; try again or use manual verification' });
     }
   }
 };

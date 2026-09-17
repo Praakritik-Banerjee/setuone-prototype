@@ -5,11 +5,15 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { connectors } = require('../connectors');
 const { validateApplicationData, isNonEmptyString } = require('../validation');
+const notificationProvider = require('../notificationProvider');
 
 const router = express.Router();
 
 function notify(db, citizenId, message) {
-  db.notifications.push({ id: uuid(), citizenId, message, channel: 'sms+email (mock)', status: 'sent', createdAt: new Date().toISOString() });
+  const citizen = db.users.find(user => user.id === citizenId);
+  const notification = { id: uuid(), citizenId, message, email: citizen?.email, channel: 'in-app', status: 'sent', createdAt: new Date().toISOString() };
+  db.notifications.push(notification);
+  notificationProvider.send(notification).catch(error => console.error(`Notification delivery failed: ${error.message}`));
 }
 
 function enrich(app, db) {
@@ -37,17 +41,54 @@ router.get('/services/catalog', requireAuth, (req, res) => {
 
 // Citizen submits an application. Runs mock identity-verification connectors
 // automatically instead of asking the citizen to prove the same facts again.
-router.post('/', requireAuth, requireRole('citizen'), (req, res) => {
+router.post('/', requireAuth, requireRole('citizen'), async (req, res) => {
   const { serviceId, data } = req.body || {};
   if (!isNonEmptyString(serviceId)) return res.status(400).json({ error: 'serviceId is required' });
   const db = load();
   const service = db.services.find(s => s.id === serviceId);
   if (!service) return res.status(404).json({ error: 'Unknown service' });
-  const validationErrors = validateApplicationData(service, data || {});
+  const citizen = db.users.find(u => u.id === req.user.id);
+  const submissionData = { ...(data || {}) };
+  if (service.name === 'New Ration Card') {
+    const pincodeMatch = String(submissionData.pincode || submissionData.address || '').match(/\b\d{6}\b/);
+    if (pincodeMatch) {
+      const pincodeResult = await connectors.pincode.lookup(db, pincodeMatch[0]);
+      if (!pincodeResult.valid) {
+        save(db);
+        return res.status(400).json({ error: 'Application failed address verification', code: 'ADDRESS_VERIFICATION_ERROR', details: [{ field: 'data.pincode', message: pincodeResult.reason }] });
+      }
+      submissionData.pincode = pincodeMatch[0];
+      submissionData.addressDistrict = pincodeResult.district;
+      submissionData.addressState = pincodeResult.state;
+    }
+  }
+  let consentUsed = null;
+  if (service.name === 'Scholarship Application') {
+    const socialWelfare = db.departments.find(department => department.code === 'SWD');
+    consentUsed = db.consents.find(consent => consent.citizenId === req.user.id
+      && consent.departmentId === socialWelfare?.id
+      && consent.status === 'granted'
+      && new Date(consent.expiresAt) > new Date());
+    if (consentUsed && !isNonEmptyString(submissionData.annualIncome)) {
+      try {
+        const income = connectors.incomeRegistry.fetch(db, citizen.aadhaar);
+        if (income?.annualIncome !== undefined) {
+          submissionData.annualIncome = income.annualIncome;
+          submissionData.annualIncomeSource = 'consent';
+          submissionData.incomeConsentId = consentUsed.id;
+        }
+      } catch (error) {
+        submissionData.annualIncomeConnectorError = 'manual verification required';
+      }
+    }
+    if (isNonEmptyString(submissionData.casteCategory)) {
+      submissionData.casteVerification = connectors.casteRegistry.lookup(db, citizen.aadhaar, submissionData.casteCategory);
+    }
+  }
+  const validationErrors = validateApplicationData(service, submissionData);
   if (validationErrors.length) {
     return res.status(400).json({ error: 'Application failed data-quality checks', code: 'DATA_QUALITY_ERROR', details: validationErrors });
   }
-  const citizen = db.users.find(u => u.id === req.user.id);
 
   const verification = citizen.aadhaar ? connectors.aadhaar.verify(db, citizen.aadhaar) : { verified: false, reason: 'No Aadhaar on file' };
 
@@ -58,15 +99,30 @@ router.post('/', requireAuth, requireRole('citizen'), (req, res) => {
     departmentId: service.departmentId,
     status: 'In Progress',
     currentStageIndex: 0,
-    data: data || {},
+    data: submissionData,
+    consentUsed: consentUsed && submissionData.annualIncomeSource === 'consent' ? consentUsed.id : null,
     identityVerification: verification,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    history: [{ stage: service.workflow[0], at: new Date().toISOString(), by: citizen.name, note: 'Application submitted' }]
+    history: [{
+      stage: service.workflow[0],
+      at: new Date().toISOString(),
+      by: citizen.name,
+      note: consentUsed && submissionData.annualIncomeSource === 'consent'
+        ? `Application submitted; annualIncome auto-filled via consent ${consentUsed.id}`
+        : 'Application submitted'
+    }]
   };
   db.applications.push(app);
   notify(db, citizen.id, `Your application for "${service.name}" has been received. Track it anytime with reference ${app.id.slice(0, 8)}.`);
-  logAction(db, { actor: citizen.name, actorRole: 'citizen', action: 'APPLICATION_SUBMITTED', entity: 'application', entityId: app.id, details: { serviceId } });
+  logAction(db, {
+    actor: citizen.name,
+    actorRole: 'citizen',
+    action: 'APPLICATION_SUBMITTED',
+    entity: 'application',
+    entityId: app.id,
+    details: { serviceId, consentUsed: app.consentUsed, autoFilledFields: app.consentUsed ? ['annualIncome'] : [] }
+  });
   save(db);
   res.status(201).json(enrich(app, db));
 });

@@ -26,6 +26,16 @@ router.post('/pan/verify', requireAuth, (req, res) => {
   res.json(result);
 });
 
+router.post('/pincode/verify', requireAuth, async (req, res) => {
+  const pincode = (req.body || {}).pincode;
+  if (!/^\d{6}$/.test(String(pincode || ''))) return res.status(400).json({ error: 'pincode must be a six-digit number' });
+  const db = load();
+  const result = await connectors.pincode.lookup(db, pincode);
+  save(db);
+  if (!result.valid) return res.status(400).json(result);
+  res.json(result);
+});
+
 router.get('/health', requireAuth, (req, res) => {
   const db = load();
   const recent = db.connectorLogs.slice(-50).reverse();

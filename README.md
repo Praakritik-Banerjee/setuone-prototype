@@ -45,24 +45,33 @@ in the codebase has to change.
 - **Frontend**: plain HTML/CSS/JS (three portals: citizen, officer, admin) —
   no build step, served statically by Express
 
+Optional email delivery uses Nodemailer. Set `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and optionally `SMTP_FROM` plus
+`NOTIFICATION_TEST_RECIPIENT`. Without `SMTP_HOST`, notifications remain in
+the JSON store and the server logs that it is running in mock mode. Ethereal
+credentials can be created at https://ethereal.email and used with its SMTP
+host, port, username, and password; view test messages in its web inbox.
+
 ## Features implemented
 
 | Problem statement ask | Where it lives |
 |---|---|
 | API-based exchange | `backend/routes/*.js` — one REST API per capability |
-| Common data standards / Master data management | `routes/citizens.js` "golden record", dedupe check in `routes/auth.js` |
+| Common data standards / Master data management | `routes/citizens.js` "golden record", exact and near-duplicate review in `mdm.js` and `routes/admin.js` |
 | Consent-based data sharing | `routes/consent.js` |
 | Single sign-on / federated identity | `middleware/auth.js`, one JWT used across citizen/officer/admin portals |
 | Event-driven notifications | `notify()` in `routes/applications.js`, fired on submit/advance/reject |
 | Unified application tracking | `GET /api/applications` + citizen "golden record" |
 | Configurable workflow orchestration | Each `service.workflow` is a plain array of stage names — add a service with a new workflow with no code change |
 | Reusable connectors for legacy/modern systems | `backend/connectors.js` |
+| Real free verification | India Post pincode district/state lookup; local PAN holder-type structure validation (not live PAN status) |
 | Audit logs | `backend/audit.js`, `routes/audit.js`, visible in Admin dashboard |
 | Role-based access control | `requireRole()` in `middleware/auth.js` |
-| Exception handling | rejection flow (`PATCH /applications/:id/reject`) with reason capture |
+| Exception handling | rejection flow plus scheduled SLA escalation in `escalation.js` |
 | Grievance management | `routes/grievances.js` — citizen complaints, officer responses and grievance SLA metrics |
 | Monitoring dashboard / SLA compliance | `routes/dashboard.js`, Admin dashboard UI |
 | Input and data-quality validation | `backend/validation.js`, structured `DATA_QUALITY_ERROR` responses |
+| Configurable service workflows | Admin workflow builder in `routes/admin.js` and `admin.html` |
 | Safe JSON persistence | `backend/db.js`, atomic writes protected by a write lock |
 
 ## Running it
@@ -111,6 +120,19 @@ check in action.
    taken across every role.
 
 ## Extending this into a full production build
+
+### Migrating to a real database
+
+Replace the synchronous `load()` and `save()` implementation in `db.js` with
+a Postgres repository while keeping the route-facing operations stable. Create
+tables for users, departments, services, applications, consents, audit logs,
+notifications, connector logs, grievances, and data-quality flags; preserve the
+JSON field shapes as typed columns or JSONB where appropriate. The migration
+must retain required-field validation, consent checks before connector reads,
+and atomic escalation updates in transactions. Add indexes for citizen,
+department, service, status, and expiration lookups, then run a one-time
+import that validates existing JSON records before switching the application
+to the new connection pool.
 
 - Replace `backend/db.js` with a real database (Postgres recommended) behind
   the same `load()/save()` shape, or refactor each route to use an ORM.

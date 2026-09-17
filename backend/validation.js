@@ -15,7 +15,7 @@ function validateAadhaar(value) {
 }
 
 function validatePan(value) {
-  return typeof value === 'string' && /^[A-Z]{5}\d{4}[A-Z]$/.test(value);
+  return typeof value === 'string' && /^[A-Z]{3}[PCHFTABLJG][A-Z]\d{4}[A-Z]$/.test(value.replace(/\s/g, '').toUpperCase());
 }
 
 function requiredFields(body, fields) {
@@ -39,7 +39,9 @@ function validateApplicationData(service, body) {
     return [{ field: 'data', message: 'data must be an object' }];
   }
   for (const field of service.requiredFields || []) {
-    if (!isNonEmptyString(body[field])) errors.push({ field: `data.${field}`, message: `${field} is required` });
+    const value = body[field];
+    const present = isNonEmptyString(value) || (typeof value === 'number' && Number.isFinite(value));
+    if (!present) errors.push({ field: `data.${field}`, message: `${field} is required` });
   }
   if (body.mobile && !validateMobile(body.mobile)) errors.push({ field: 'data.mobile', message: 'Must be a valid 10-digit Indian mobile number' });
   if (body.aadhaar && !validateAadhaar(body.aadhaar)) errors.push({ field: 'data.aadhaar', message: 'Must be a valid 12-digit Aadhaar value' });

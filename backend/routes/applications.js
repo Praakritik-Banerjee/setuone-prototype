@@ -1,6 +1,6 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
-const { load, save } = require('../db');
+const { randomUUID } = require('crypto');
+const { load, save, getApplicationById, advanceApplicationStage } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { connectors } = require('../connectors');
@@ -11,7 +11,7 @@ const router = express.Router();
 
 function notify(db, citizenId, message) {
   const citizen = db.users.find(user => user.id === citizenId);
-  const notification = { id: uuid(), citizenId, message, email: citizen?.email, channel: 'in-app', status: 'sent', createdAt: new Date().toISOString() };
+  const notification = { id: randomUUID(), citizenId, message, email: citizen?.email, channel: 'in-app', status: 'sent', createdAt: new Date().toISOString() };
   db.notifications.push(notification);
   notificationProvider.send(notification).catch(error => console.error(`Notification delivery failed: ${error.message}`));
 }
@@ -93,7 +93,7 @@ router.post('/', requireAuth, requireRole('citizen'), async (req, res) => {
   const verification = citizen.aadhaar ? connectors.aadhaar.verify(db, citizen.aadhaar) : { verified: false, reason: 'No Aadhaar on file' };
 
   const app = {
-    id: uuid(),
+    id: randomUUID(),
     citizenId: req.user.id,
     serviceId,
     departmentId: service.departmentId,
@@ -144,7 +144,7 @@ router.get('/', requireAuth, (req, res) => {
 
 router.get('/:id', requireAuth, (req, res) => {
   const db = load();
-  const app = db.applications.find(a => a.id === req.params.id);
+  const app = getApplicationById(req.params.id, db);
   if (!app) return res.status(404).json({ error: 'Application not found' });
   if (req.user.role === 'citizen' && app.citizenId !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
   if (req.user.role === 'officer' && app.departmentId !== req.user.departmentId) return res.status(403).json({ error: 'Forbidden' });
@@ -157,7 +157,7 @@ router.patch('/:id/advance', requireAuth, requireRole('officer', 'admin'), (req,
   const { note } = req.body || {};
   if (note !== undefined && !isNonEmptyString(note)) return res.status(400).json({ error: 'note must be a non-empty string when provided' });
   const db = load();
-  const app = db.applications.find(a => a.id === req.params.id);
+  const app = getApplicationById(req.params.id, db);
   if (!app) return res.status(404).json({ error: 'Application not found' });
   if (req.user.role === 'officer' && app.departmentId !== req.user.departmentId) {
     return res.status(403).json({ error: 'You may only act on applications for your own department' });
@@ -176,6 +176,7 @@ router.patch('/:id/advance', requireAuth, requireRole('officer', 'admin'), (req,
   const citizen = db.users.find(u => u.id === app.citizenId);
   notify(db, citizen.id, `Update on "${service.name}": your application moved to stage "${stageName}".`);
   logAction(db, { actor: req.user.name, actorRole: req.user.role, action: 'STAGE_ADVANCED', entity: 'application', entityId: app.id, details: { stage: stageName } });
+  advanceApplicationStage(app.id, app.currentStageIndex, db);
   save(db);
   res.json(enrich(app, db));
 });
@@ -185,7 +186,7 @@ router.patch('/:id/reject', requireAuth, requireRole('officer', 'admin'), (req, 
   const { reason } = req.body || {};
   if (!isNonEmptyString(reason)) return res.status(400).json({ error: 'A rejection reason is required' });
   const db = load();
-  const app = db.applications.find(a => a.id === req.params.id);
+  const app = getApplicationById(req.params.id, db);
   if (!app) return res.status(404).json({ error: 'Application not found' });
   if (req.user.role === 'officer' && app.departmentId !== req.user.departmentId) {
     return res.status(403).json({ error: 'You may only act on applications for your own department' });

@@ -1,7 +1,6 @@
-// db.js — repository shim for the prototype. The legacy JSON data layer remains
-// available in db.legacy.js for rollback, while the route-level helpers below
-// provide the specific application-query functions expected by the Postgres-era
-// API contract without forcing a risky wholesale rewrite of the route logic.
+// db.js — lightweight JSON-file "database" so the prototype runs with zero
+// external DB dependency. Swap this module for Postgres/Mongo in production;
+// every other file only talks to the functions exported here.
 const fs = require('fs');
 const path = require('path');
 
@@ -60,28 +59,9 @@ function save(db) {
     if (fs.existsSync(temporaryFile)) fs.unlinkSync(temporaryFile);
     if (lockHandle) {
       fs.closeSync(lockHandle);
-      if (fs.existsSync(LOCK_FILE)) fs.unlinkSync(LOCK_FILE);
+      fs.unlinkSync(LOCK_FILE);
     }
   }
 }
 
-function getApplicationById(id, db = load()) {
-  return db.applications.find(application => application.id === id) || null;
-}
-
-function insertApplication(application, db = load()) {
-  db.applications.push(application);
-  save(db);
-  return application;
-}
-
-function advanceApplicationStage(id, newIndex, db = load()) {
-  const application = db.applications.find(item => item.id === id);
-  if (!application) return null;
-  application.currentStageIndex = newIndex;
-  application.updatedAt = new Date().toISOString();
-  save(db);
-  return application;
-}
-
-module.exports = { load, save, DEFAULT_DB, getApplicationById, insertApplication, advanceApplicationStage };
+module.exports = { load, save, DEFAULT_DB };

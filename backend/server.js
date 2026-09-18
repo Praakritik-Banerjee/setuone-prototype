@@ -1,11 +1,12 @@
 // server.js — the API Gateway / middleware layer described in the problem
 // statement: one entry point that fronts every department's services,
 // enforces auth + RBAC, and logs everything for audit.
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const citizenRoutes = require('./routes/citizens');

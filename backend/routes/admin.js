@@ -1,5 +1,5 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 const { load, save } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
@@ -24,7 +24,7 @@ router.post('/services', requireAuth, requireRole('admin'), (req, res) => {
   if (errors.length) return res.status(400).json({ error: 'Invalid service data', details: errors });
   const db = load();
   if (!db.departments.some(department => department.id === req.body.departmentId)) return res.status(400).json({ error: 'Unknown department' });
-  const service = { id: uuid(), name: req.body.name.trim(), departmentId: req.body.departmentId, workflow: req.body.workflow.map(stage => stage.trim()), slaHours: req.body.slaHours, requiredFields: req.body.requiredFields.map(field => field.trim()) };
+  const service = { id: randomUUID(), name: req.body.name.trim(), departmentId: req.body.departmentId, workflow: req.body.workflow.map(stage => stage.trim()), slaHours: req.body.slaHours, requiredFields: req.body.requiredFields.map(field => field.trim()) };
   db.services.push(service);
   logAction(db, { actor: req.user.name, actorRole: req.user.role, action: 'SERVICE_CREATED', entity: 'service', entityId: service.id });
   save(db);

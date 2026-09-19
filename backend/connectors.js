@@ -3,10 +3,10 @@
 // (verify/fetch), so the rest of the platform never has to know whether the
 // underlying system is a modern REST API, a SOAP service or an old FTP dump.
 // Swap the mock logic here for a real client without touching any route.
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 
 function logCall(db, connector, request, response, status) {
-  db.connectorLogs.push({ id: uuid(), connector, request, response, status, timestamp: new Date().toISOString() });
+  db.connectorLogs.push({ id: randomUUID(), connector, request, response, status, timestamp: new Date().toISOString() });
 }
 
 function call(db, connector, request, operation, fallback) {

@@ -1,4 +1,4 @@
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 const { logAction } = require('./audit');
 
 function checkSlaBreaches(db) {
@@ -12,7 +12,7 @@ function checkSlaBreaches(db) {
     app.escalated = true;
     app.escalatedAt = now.toISOString();
     app.history.push({ stage: app.history[app.history.length - 1]?.stage || 'Escalated', at: app.escalatedAt, by: 'SetuOne SLA monitor', note: 'SLA breach escalated for officer review' });
-    db.notifications.push({ id: uuid(), departmentId: app.departmentId, message: `Application ${app.id.slice(0, 8)} has breached its SLA and was escalated.`, channel: 'in-app', status: 'sent', createdAt: app.escalatedAt });
+    db.notifications.push({ id: randomUUID(), departmentId: app.departmentId, message: `Application ${app.id.slice(0, 8)} has breached its SLA and was escalated.`, channel: 'in-app', status: 'sent', createdAt: app.escalatedAt });
     logAction(db, { actor: 'SetuOne SLA monitor', actorRole: 'system', action: 'SLA_ESCALATED', entity: 'application', entityId: app.id, details: { departmentId: app.departmentId } });
     changed = true;
   });

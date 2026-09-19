@@ -1,4 +1,4 @@
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 
 function normalizeName(name) {
   return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -57,7 +57,7 @@ function createFlag(db, candidateId, match) {
     && flag.candidateIds.every(id => candidateIds.includes(id)));
   if (existing) return existing;
   const flag = {
-    id: uuid(),
+    id: randomUUID(),
     type: 'POTENTIAL_DUPLICATE',
     candidateIds,
     reason: match.reason,

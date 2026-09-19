@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 const { load, save } = require('../db');
 const { sign } = require('../middleware/auth');
 const { logAction } = require('../audit');
@@ -41,7 +41,7 @@ router.post('/register-citizen', (req, res) => {
   if (dup) {
     return res.status(409).json({ error: 'A citizen record already exists with this Aadhaar/mobile/email (MDM dedupe match)', existingId: dup.id });
   }
-  const user = { id: uuid(), name, role: 'citizen', aadhaar: aadhaar || null, mobile, email, dateOfBirth: dateOfBirth || null, passwordHash: bcrypt.hashSync(password, 8) };
+  const user = { id: randomUUID(), name, role: 'citizen', aadhaar: aadhaar || null, mobile, email, dateOfBirth: dateOfBirth || null, passwordHash: bcrypt.hashSync(password, 8) };
   db.users.push(user);
   const potentialDuplicates = findPotentialDuplicates(db, user)
     .filter(match => match.user.id !== user.id);

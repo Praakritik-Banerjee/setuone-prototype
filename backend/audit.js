@@ -1,8 +1,8 @@
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 
 function logAction(db, { actor, actorRole, action, entity, entityId, details }) {
   db.auditLogs.push({
-    id: uuid(),
+    id: randomUUID(),
     actor,
     actorRole,
     action,

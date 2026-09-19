@@ -1,5 +1,5 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 const { load, save } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
@@ -18,7 +18,7 @@ router.post('/', requireAuth, requireRole('citizen'), (req, res) => {
   const db = load();
   if (!db.departments.some(department => department.id === departmentId)) return res.status(400).json({ error: 'Unknown department' });
   const consent = {
-    id: uuid(),
+    id: randomUUID(),
     citizenId: req.user.id,
     departmentId,
     purpose,

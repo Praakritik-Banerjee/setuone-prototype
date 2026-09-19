@@ -1,5 +1,5 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
+const { randomUUID } = require('crypto');
 const { load, save } = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
@@ -32,7 +32,7 @@ router.post('/', requireAuth, requireRole('citizen'), (req, res) => {
   if (!application) return res.status(404).json({ error: 'Application not found for this citizen' });
 
   const grievance = {
-    id: uuid(),
+    id: randomUUID(),
     applicationId,
     citizenId: req.user.id,
     departmentId: application.departmentId,
